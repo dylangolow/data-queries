@@ -1,9 +1,8 @@
-WITH all_txns AS (SELECT * FROM (SELECT evt_block_time AS date, price,
-                                        maker AS account
+WITH all_txns AS (SELECT * FROM (SELECT evt_block_time AS date, price, maker AS account
                                  FROM opensea."WyvernExchange_evt_OrdersMatched"
-                                 UNION SELECT evt_block_time AS date, price,
-                                              taker AS account
+                                 UNION SELECT evt_block_time AS date, price, taker AS account
                                  FROM opensea."WyvernExchange_evt_OrdersMatched") a
+                  WHERE "date" >= '2022-02-01 00:00:00' AND "date" < '2022-05-01 00:00:00'
 ),
      feb_accounts AS (SELECT account, sum(price/10^18) as vol
                       FROM all_txns
