@@ -8,10 +8,12 @@ WITH positions_above_zero AS (
              (SELECT trade_amount as value, market FROM buys
               UNION SELECT -trade_amount as value, market from sells) t
          GROUP BY market),
+
+     market_liq AS (SELECT scaled_liquidity_parameter, id FROM subgraph.fixed_product_market_maker WHERE scaled_liquidity_parameter > 0),
      conditions_with_fpmm AS (SELECT *, fixed_product_market_makers[1] as fpmm from subgraph.condition WHERE fixed_product_market_makers!='{}'),
 
      -- conditions_with_fpmm AS (SELECT id, array_agg(fixed_product_market_makers) from subgraph.condition GROUP BY id HAVING Count(fixed_product_market_makers) > 1),
-     condition_join_fpmm AS (SELECT * FROM subgraph.fixed_product_market_maker f JOIN (SELECT fixed_product_market_makers[1] as fpmm, id FROM subgraph.condition) c ON c.fpmm = f.id),
+     condition_join_fpmm AS (SELECT * FROM subgraph.fixed_product_market_maker f JOIN (SELECT fixed_product_market_makers[1] as fpmm, id, resolution_timestamp FROM subgraph.condition) c ON c.fpmm = f.id),
      splits AS (SELECT * FROM subgraph.split),
      merges AS (SELECT * FROM subgraph.merge),
      redemptions AS (SELECT * FROM subgraph.redemption where redeemer!='0x45373c80906b6d1d3c66de6e2dde4d30709c239b'),
@@ -25,9 +27,9 @@ WITH positions_above_zero AS (
      --             JOIN conditions_with_fpmm c2 on r.condition = c2.id) t2
      --         ON t1.fpmm = t2.fpmm),
      -- redemptions AS (SELECT * FROM subgraph.redemption),
-     total_splits AS (SELECT sum(amount)/1000000 as total_splits from splits),
-     total_merges as (SELECT sum(amount)/1000000 as total_merges from merges),
-     total_payouts as (SELECT sum(payout)/1000000 as total_payouts from redemptions where redeemer!='0x45373c80906b6d1d3c66de6e2dde4d30709c239b'),
+     total_splits AS (SELECT sum(amount)/1000000 as total_splits, condition from splits GROUP BY condition),
+     total_merges as (SELECT sum(amount)/1000000 as total_merges, condition from merges GROUP BY condition),
+     total_payouts as (SELECT sum(payout)/1000000 as total_payouts, condition from redemptions where redeemer!='0x45373c80906b6d1d3c66de6e2dde4d30709c239b' GROUP BY condition),
      new_oi AS (SELECT sum(value)/1000000 as new_oi from (
                                                              SELECT sum(amount) as value from splits
                                                              UNION SELECT -sum(amount) as value from merges
@@ -49,5 +51,12 @@ WITH positions_above_zero AS (
 -- SELECT COUNT(*) FROM conditions_with_fpmm;
 -- SELECT * FROM conditions_with_fpmm;
 -- SELECT COUNT(*) from bs_cons;
-SELECT COUNT(*) FROM condition_join_fpmm;
+-- SELECT COUNT(*) FROM condition_join_fpmm;
 -- SELECT buy_minus_sell JOIN conditions_with_fpmm ON market = fpmm
+-- SELECT * FROM buy_minus_sell join market_liq on buy_minus_sell.market = market_liq.id ORDER BY scaled_liquidity_parameter DESC;
+SELECT * FROM buy_minus_sell
+                  JOIN market_liq ON buy_minus_sell.market = market_liq.id
+                  JOIN condition_join_fpmm ON condition_join_fpmm.fpmm = market_liq.id
+              -- JOIN total_splits ON condition = market_liq.id
+WHERE resolution_timestamp IS NULL
+ORDER BY market_liq.scaled_liquidity_parameter DESC;
